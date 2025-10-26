@@ -34,9 +34,4 @@ ENV DISPLAY=:99
 
 # ENTRYPOINT ["sh", "-c", "Xvfb :99 -screen 0 1280x720x24 & python shopeefood_scraper.py"]
 ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["python", "shopeefood_scraper.py"]
-
-
-# # Use xvfb-run to automatically start Xvfb for headful Chromium
-# ENTRYPOINT ["/app/entrypoint.sh"]
-# CMD ["python", "shopeefood_scraper.py"]
+CMD ["python", "server.py"]

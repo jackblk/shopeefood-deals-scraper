@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ShopeeFood Deals Finder</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 600px;
+      margin: 80px auto;
+      text-align: center;
+    }
+
+    input {
+      width: 100%;
+      padding: 10px;
+      font-size: 15px;
+      margin-bottom: 10px;
+    }
+
+    button {
+      padding: 10px 20px;
+      font-size: 15px;
+      cursor: pointer;
+    }
+
+    pre {
+      text-align: left;
+      white-space: pre-wrap;
+      background: #f6f8fa;
+      padding: 10px;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>ShopeeFood Deals Finder</h1>
+  <form id="deal-form">
+    <input type="text" id="url"
+      value="https://shopeefood.vn/ho-chi-minh/food/danh-sach-dia-diem-tai-khu-vuc-quan-12-giao-tan-noi?q=highlands" />
+    <button type="submit">Find Deals</button>
+  </form>
+  <pre id="output"></pre>
+
+  <script>
+    const form = document.getElementById("deal-form");
+    const output = document.getElementById("output");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      output.textContent = "Fetching deals...";
+      const url = document.getElementById("url").value;
+
+      try {
+        // First, call /restaurants to get restaurant URLs
+        const restRes = await fetch(`/restaurants?url=${encodeURIComponent(url)}`);
+        const restData = await restRes.json();
+        if (!restData.ok) throw new Error(restData.error || "Failed to fetch restaurants");
+
+        // Then call /deals with the restaurant URLs
+        const dealRes = await fetch("/deals", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ urls: restData.restaurants }),
+        });
+
+        const dealData = await dealRes.json();
+        output.textContent = JSON.stringify(dealData, null, 2);
+      } catch (err) {
+        output.textContent = "Error: " + err.message;
+      }
+    });
+  </script>
+</body>
+
+</html>
