@@ -148,21 +148,30 @@ class ShopeeFoodScraper:
     def batch_parse_special_discounts_from_menu_infos(
         menu_infos: dict[str, dict], price_threshold=100
     ) -> dict[str, list[dict]]:
-        """Parse restaurant menu infos for great deals."""
+        """Parse restaurant menu infos for great deals without duplicates."""
 
         special_deals = {}
         for url_, menu in menu_infos.items():
+            seen = set()
             good_deals = []
             for dish_type in menu:
-                for item in dish_type["dishes"]:
-                    if "discount_price" not in item:
+                for item in dish_type.get("dishes", []):
+                    discount_price = item.get("discount_price", {}).get("value")
+                    if discount_price is None or discount_price >= price_threshold:
                         continue
-                    discount_price = item["discount_price"].get("value", None)
-                    if discount_price is not None and discount_price < price_threshold:
+
+                    key = (
+                        item.get("name"),
+                        item.get("price", {}).get("value"),
+                        discount_price,
+                    )
+
+                    if key not in seen:
+                        seen.add(key)
                         good_deals.append(
                             {
-                                "name": item["name"],
-                                "original_price": item["price"]["value"],
+                                "name": item.get("name"),
+                                "original_price": item.get("price", {}).get("value"),
                                 "discount_price": discount_price,
                             }
                         )
