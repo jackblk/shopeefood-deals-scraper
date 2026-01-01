@@ -8,71 +8,291 @@
   <style>
     body {
       font-family: system-ui, sans-serif;
-      max-width: 600px;
-      margin: 80px auto;
+      margin: 16px;
+      line-height: 1.4;
+    }
+
+    h1 {
       text-align: center;
+      font-size: 20px;
+      margin-bottom: 16px;
+    }
+
+    form {
+      margin-bottom: 20px;
     }
 
     input {
       width: 100%;
-      padding: 10px;
-      font-size: 15px;
-      margin-bottom: 10px;
+      padding: 12px;
+      font-size: 16px;
+      margin-bottom: 8px;
+      box-sizing: border-box;
     }
 
     button {
-      padding: 10px 20px;
-      font-size: 15px;
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
       cursor: pointer;
     }
 
-    pre {
-      text-align: left;
-      white-space: pre-wrap;
-      background: #f6f8fa;
-      padding: 10px;
-      border-radius: 6px;
+    .item {
+      margin-bottom: 22px;
+    }
+
+    .item-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+
+    .item-header h3 {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.25;
+      font-weight: 600;
+    }
+
+    ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    li {
+      margin: 6px 0;
       font-size: 14px;
     }
+
+    .price {
+      color: #d00;
+    }
+
+    s {
+      color: #666;
+      margin-left: 4px;
+      font-size: 13px;
+    }
+
+    .star {
+      width: 24px;
+      height: 24px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: #bbb;
+      flex-shrink: 0;
+    }
+
+    .star.active {
+      color: #f5b301;
+    }
+
+
+    /* Desktop enhancement */
+    @media (min-width: 768px) {
+      body {
+        max-width: 720px;
+        margin: 40px auto;
+      }
+
+      h1 {
+        font-size: 24px;
+      }
+
+      .item-header h3 {
+        font-size: 18px;
+      }
+
+      li {
+        font-size: 15px;
+      }
+    }
   </style>
+
 </head>
 
 <body>
   <h1>ShopeeFood Deals Finder</h1>
+
   <form id="deal-form">
     <input type="text" id="url"
       value="https://shopeefood.vn/ho-chi-minh/food/danh-sach-dia-diem-tai-khu-vuc-quan-12-giao-tan-noi?q=highlands" />
     <button type="submit">Find Deals</button>
   </form>
-  <pre id="output"></pre>
+
+  <div id="output"></div>
+
+  <style>
+    .item {
+      border: 1px solid #ddd;
+      padding: 10px;
+      margin: 12px 0;
+      border-radius: 8px;
+    }
+
+    .item-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .star {
+      cursor: pointer;
+      color: #bbb;
+      display: flex;
+      align-items: center;
+    }
+
+    .star.active {
+      color: gold;
+    }
+
+    .star svg {
+      pointer-events: none;
+    }
+
+    ul {
+      padding-left: 18px;
+    }
+  </style>
 
   <script>
     const form = document.getElementById("deal-form");
     const output = document.getElementById("output");
 
+    function getFavorites() {
+      return new Set(JSON.parse(localStorage.getItem("favorites") || "[]"));
+    }
+
+    function saveFavorites(favs) {
+      localStorage.setItem("favorites", JSON.stringify([...favs]));
+    }
+
+    function groupByItem(deals, restaurants) {
+      const urlToName = Object.fromEntries(
+        restaurants.map(r => [r.url, r.name])
+      );
+
+      const items = {};
+
+      for (const [url, list] of Object.entries(deals)) {
+        const restaurant = urlToName[url] || url;
+
+        for (const d of list) {
+          if (!items[d.name]) {
+            const photos = d.original_data?.photos || [];
+            items[d.name] = {
+              image:
+                photos.find(p => p.width >= 180)?.value ||
+                photos[0]?.value ||
+                null,
+              sellers: []
+            };
+          }
+
+          items[d.name].sellers.push({
+            restaurant,
+            restaurantUrl: url,
+            original: d.original_price,
+            discount: d.discount_price
+          });
+        }
+      }
+
+      return items;
+    }
+
+    function render(items) {
+      output.innerHTML = "";
+      const favorites = getFavorites();
+
+      const sorted = Object.entries(items).sort(([a], [b]) => {
+        const fa = favorites.has(a);
+        const fb = favorites.has(b);
+        if (fa !== fb) return fa ? -1 : 1;
+        return a.localeCompare(b);
+      });
+
+      for (const [item, data] of sorted) {
+        const div = document.createElement("div");
+        div.className = "item";
+
+        const header = document.createElement("div");
+        header.className = "item-header";
+
+        const star = document.createElement("span");
+        star.className = "star" + (favorites.has(item) ? " active" : "");
+        star.innerHTML = `
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+            <path d="M12 17.3l6.18 3.7-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+          </svg>
+        `;
+
+        star.addEventListener("click", () => {
+          const favs = getFavorites();
+          favs.has(item) ? favs.delete(item) : favs.add(item);
+          saveFavorites(favs);
+          render(items);
+        });
+
+        const title = document.createElement("h3");
+        title.textContent = item;
+
+        header.appendChild(star);
+        header.appendChild(title);
+        div.appendChild(header);
+
+        if (data.image) {
+          const img = document.createElement("img");
+          img.src = data.image;
+          img.loading = "lazy";
+          img.style.maxWidth = "160px";
+          img.style.borderRadius = "8px";
+          img.style.margin = "6px 0";
+          div.appendChild(img);
+        }
+
+        data.sellers.sort((a, b) => a.discount - b.discount);
+
+        const ul = document.createElement("ul");
+        ul.innerHTML = data.sellers.map(s => `
+          <li>
+            <a href="${s.restaurantUrl}" target="_blank" rel="noopener">
+              ${s.restaurant}
+            </a>
+            — <b>${s.discount.toLocaleString()}đ</b>
+            <s>${s.original.toLocaleString()}đ</s>
+          </li>
+        `).join("");
+
+        div.appendChild(ul);
+        output.appendChild(div);
+      }
+    }
+
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       output.textContent = "Fetching deals...";
+
       const url = document.getElementById("url").value;
 
-      try {
-        // First, call /restaurants to get restaurant URLs
-        const restRes = await fetch(`/restaurants?url=${encodeURIComponent(url)}`);
-        const restData = await restRes.json();
-        if (!restData.ok) throw new Error(restData.error || "Failed to fetch restaurants");
+      const restRes = await fetch(`/restaurants?url=${encodeURIComponent(url)}`);
+      const restData = await restRes.json();
 
-        // Then call /deals with the restaurant URLs
-        const dealRes = await fetch("/deals", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ urls: restData.restaurants.map(r => r.url) }),
-        });
+      const dealRes = await fetch("/deals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          urls: restData.restaurants.map(r => r.url)
+        })
+      });
 
-        const dealData = await dealRes.json();
-        output.textContent = JSON.stringify(dealData, null, 2);
-      } catch (err) {
-        output.textContent = "Error: " + err.message;
-      }
+      const dealData = await dealRes.json();
+      const grouped = groupByItem(dealData.deals, restData.restaurants);
+      render(grouped);
     });
   </script>
 </body>
