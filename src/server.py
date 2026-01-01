@@ -16,7 +16,7 @@ STATIC_DIR = BASE_DIR / "static"
 
 
 def is_no_cache(request: Request) -> bool:
-    return request.headers.get("Cache-Control") == "no-cache"
+    return request.headers.get("Cache-Control", "") == "no-cache"
 
 
 @get("/health")

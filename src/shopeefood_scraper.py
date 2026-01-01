@@ -196,6 +196,7 @@ class ShopeeFoodScraper:
                                 "name": item.get("name"),
                                 "original_price": item.get("price", {}).get("value"),
                                 "discount_price": discount_price,
+                                "original_data": item,
                             }
                         )
             if good_deals:
