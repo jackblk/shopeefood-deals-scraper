@@ -15,12 +15,16 @@ BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 
 
+def is_no_cache(request: Request) -> bool:
+    return request.headers.get("Cache-Control") == "no-cache"
+
+
 @get("/health")
 async def health() -> dict:
     return {"status": "ok"}
 
 
-@post("/init")
+@get("/init")
 async def init_browser() -> dict:
     """Start the browser manually (optional)."""
     global scraper
@@ -31,7 +35,7 @@ async def init_browser() -> dict:
     return {"ok": True, "message": "Already running"}
 
 
-@post("/close")
+@get("/close")
 async def close_browser() -> dict:
     """Stop browser manually."""
     global scraper
@@ -54,8 +58,10 @@ async def get_restaurants(request: Request) -> dict:
         return {"error": "Missing 'url'"}
 
     try:
-        restaurant_urls = await scraper.get_restaurant_links_from_search(url)
-        return {"ok": True, "restaurants": restaurant_urls}
+        restaurant_info = await scraper.get_restaurant_info_from_search(
+            url, NO_CACHE=is_no_cache(request)
+        )
+        return {"ok": True, "restaurants": restaurant_info}
     except Exception as e:
         logger.exception("Failed to get restaurants")
         return {"ok": False, "error": str(e)}
@@ -75,7 +81,9 @@ async def get_deals(request: Request) -> dict:
         return {"error": "Missing 'urls'"}
 
     try:
-        menu_infos = await scraper.batch_get_restaurant_menu_infos(urls)
+        menu_infos = await scraper.batch_get_restaurant_menu_infos(
+            urls, NO_CACHE=is_no_cache(request)
+        )
         deals = scraper.batch_parse_special_discounts_from_menu_infos(menu_infos)
         return {"ok": True, "deals": deals}
     except Exception as e:

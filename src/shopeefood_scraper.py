@@ -4,7 +4,8 @@ import base64
 import json
 import logging
 import os
-from typing import Callable, Optional
+import time
+from typing import Any, Callable
 
 import zendriver
 from zendriver import cdp
@@ -34,6 +35,12 @@ def filter_restaurant_info(event: cdp.network.ResponseReceived) -> bool:
     return "application/json" in headers.get("content-type", "")
 
 
+class CACHE_KEYS:
+    RESTAURANT_INFO = "restaurant_info:"
+    CATCH_REQUEST = "catch_request:"
+    MENU_INFO = "menu_info:"
+
+
 class ShopeeFoodScraper:
     """Manages a single browser instance and multiple concurrent tabs."""
 
@@ -42,8 +49,24 @@ class ShopeeFoodScraper:
     ):
         self.logger = logging.getLogger(__name__)
         self.timeout = timeout
-        self.browser: Optional[zendriver.Browser] = None
+        self.browser: zendriver.Browser | None = None
         self.semaphore = asyncio.Semaphore(max_concurrent_tabs)
+        # simple cache key -> (value, expiry_time)
+        self.cache: dict[str, tuple[Any, float | None]] = {}
+
+    def _get_cache_key(self, key: str):
+        if key not in self.cache:
+            return None
+        # check expiry
+        value, expiry = self.cache[key]
+        if expiry and expiry < time.time():
+            del self.cache[key]
+            return None
+        return value
+
+    def _set_cache_key(self, key: str, value: Any, ttl: float = 86400):
+        expiry = time.time() + ttl
+        self.cache[key] = (value, expiry)
 
     async def start(self):
         """Start the browser."""
@@ -179,30 +202,42 @@ class ShopeeFoodScraper:
                 special_deals[url_] = good_deals
         return special_deals
 
-    @staticmethod
-    def extract_restaurant_urls(restaurant_items: dict):
-        """Extract restaurant URLs from the search result JSON."""
-        return [res["url"] for res in restaurant_items["reply"]["delivery_infos"]]
-
-    async def get_restaurant_links_from_search(self, search_url: str) -> list[str]:
+    async def get_restaurant_info_from_search(
+        self, search_url: str, NO_CACHE: bool = False
+    ) -> list[dict]:
         """Get restaurant links from a search URL."""
         self._check_browser()
-        restaurant_items = await self.catch_request(
+        cached_data = self._get_cache_key(CACHE_KEYS.RESTAURANT_INFO + search_url)
+        if cached_data and not NO_CACHE:
+            self.logger.info(f"Using cached restaurant info for {search_url}")
+            return cached_data
+        restaurant_items_txt = await self.catch_request(
             search_url,
             filter_restaurant_info,
         )
-        if not restaurant_items:
+        if not restaurant_items_txt:
             self.logger.info("No restaurant data found.")
             return []
-        restaurant_urls = self.extract_restaurant_urls(json.loads(restaurant_items))
-        self.logger.info(f"Found restaurants in {search_url}: {restaurant_urls}")
-        return restaurant_urls
+        result = (
+            json.loads(restaurant_items_txt).get("reply", {}).get("delivery_infos", [])
+        )
+        self._set_cache_key(CACHE_KEYS.RESTAURANT_INFO + search_url, result)
+        return result
 
     async def batch_get_restaurant_menu_infos(
-        self, restaurant_urls: list[str], max_concurrent: int = MAX_CONCURRENT_TABS
+        self,
+        restaurant_urls: list[str],
+        max_concurrent: int = MAX_CONCURRENT_TABS,
+        NO_CACHE: bool = False,
     ) -> dict[str, dict]:
         """Get menu info from a list of restaurant URLs."""
         self._check_browser()
+        cached_data = self._get_cache_key(
+            CACHE_KEYS.MENU_INFO + "_".join(restaurant_urls)
+        )
+        if cached_data and not NO_CACHE:
+            self.logger.info("Using cached menu infos for restaurant URLs")
+            return cached_data
 
         # Limit concurrent tabs
         semaphore = asyncio.Semaphore(max_concurrent)
@@ -222,6 +257,9 @@ class ShopeeFoodScraper:
             menu_ = json.loads(restaurant_data).get("reply", {}).get("menu_infos", {})
             if menu_:
                 menu_infos[url] = menu_
+        self._set_cache_key(
+            CACHE_KEYS.MENU_INFO + "_".join(restaurant_urls), menu_infos, ttl=3600
+        )
         return menu_infos
 
 
@@ -231,7 +269,8 @@ async def main(init_url: str):
 
     scraper = ShopeeFoodScraper()
     await scraper.start()
-    restaurant_urls = await scraper.get_restaurant_links_from_search(init_url)
+    restaurants_info = await scraper.get_restaurant_info_from_search(init_url)
+    restaurant_urls = [res_info["url"] for res_info in restaurants_info]
     menu_infos = await scraper.batch_get_restaurant_menu_infos(restaurant_urls)
     await scraper.stop()
 

@@ -65,7 +65,7 @@
         const dealRes = await fetch("/deals", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ urls: restData.restaurants }),
+          body: JSON.stringify({ urls: restData.restaurants.map(r => r.url) }),
         });
 
         const dealData = await dealRes.json();
