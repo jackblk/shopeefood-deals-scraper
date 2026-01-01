@@ -64,7 +64,12 @@ class ShopeeFoodScraper:
             return None
         return value
 
-    def _set_cache_key(self, key: str, value: Any, ttl: float = 86400):
+    def _set_cache_key(
+        self,
+        key: str,
+        value: Any,
+        ttl: float = 3300,  # default 55 mins cache, will combine with hourly cache warmup
+    ):
         expiry = time.time() + ttl
         self.cache[key] = (value, expiry)
 
