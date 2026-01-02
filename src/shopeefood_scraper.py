@@ -238,6 +238,8 @@ class ShopeeFoodScraper:
     ) -> dict[str, dict]:
         """Get menu info from a list of restaurant URLs."""
         self._check_browser()
+        # deduplicate and sort to have consistent cache keys
+        restaurant_urls = sorted(list(set(restaurant_urls)))
         cached_data = self._get_cache_key(
             CACHE_KEYS.MENU_INFO + "_".join(restaurant_urls)
         )
