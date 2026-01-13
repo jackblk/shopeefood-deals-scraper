@@ -3,6 +3,7 @@ from pathlib import Path
 
 import uvicorn
 from litestar import Litestar, Request, get, post
+from litestar.exceptions import HTTPException
 from litestar.static_files import StaticFilesConfig
 from litestar.status_codes import HTTP_200_OK
 
@@ -55,7 +56,7 @@ async def get_restaurants(request: Request) -> dict:
 
     url = request.query_params.get("url")
     if not url:
-        return {"error": "Missing 'url'"}
+        raise HTTPException(status_code=400, detail="Missing 'url' query parameter")
 
     try:
         restaurant_info = await scraper.get_restaurant_info_from_search(
@@ -64,7 +65,7 @@ async def get_restaurants(request: Request) -> dict:
         return {"ok": True, "restaurants": restaurant_info}
     except Exception as e:
         logger.exception("Failed to get restaurants")
-        return {"ok": False, "error": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @post("/deals", status_code=HTTP_200_OK)
@@ -88,7 +89,7 @@ async def get_deals(request: Request) -> dict:
         return {"ok": True, "deals": deals}
     except Exception as e:
         logger.exception("Failed to fetch menus")
-        return {"ok": False, "error": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 app = Litestar(
